@@ -21,7 +21,7 @@ app.add_middleware(
 # We use try/except to handle paths depending on where the script is run
 try:
     log_reg_model = joblib.load("log_reg_model.joblib")
-    dt_model = joblib.load("decision_tree_model.joblib")
+    dt_model = joblib.load("decision_tree_model .joblib")
 except Exception as e:
     print(f"Error loading models: {e}")
 
