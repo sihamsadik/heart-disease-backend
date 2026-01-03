@@ -4,57 +4,86 @@ from pydantic import BaseModel
 import joblib
 import pandas as pd
 import numpy as np
-import os
 
 app = FastAPI()
 
-# Enable CORS so the frontend can talk to the backend
+# 1. Enable CORS (Allows your frontend to talk to this API)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, specify your Vercel domain
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Load Models
-# We use try/except to handle paths depending on where the script is run
+# 2. Load the Models
+# Ensure 'log_reg_model.joblib' and 'decision_tree_model.joblib' are in the same folder
 try:
     log_reg_model = joblib.load("log_reg_model.joblib")
-    dt_model = joblib.load("decision_tree_model .joblib")
+    dt_model = joblib.load("decision_tree_model.joblib")
+    print("Models loaded successfully!")
 except Exception as e:
     print(f"Error loading models: {e}")
 
-# Define Input Structure
+
+# 3. Define Input Data Structure (Must match the 13 columns from training)
 class PatientData(BaseModel):
     age: int
-    sex: int  # 1: Male, 0: Female
-    cp: int   # Chest Pain Type (0-3)
-    trestbps: int # Resting Blood Pressure
-    chol: int # Cholesterol
-    fbs: int  # Fasting Blood Sugar > 120 (1: True, 0: False)
-    thalach: int # Max Heart Rate
-    exang: int # Exercise Induced Angina (1: Yes, 0: No)
+    sex: int
+    cp: int
+    trestbps: int
+    chol: int
+    fbs: int
+    restecg: int
+    thalach: int
+    exang: int
+    oldpeak: float
+    slope: int
+    ca: int
+    thal: int
 
 @app.get("/")
 def home():
     return {"message": "Heart Disease Prediction API is Running"}
 
-def predict_heart_disease(model, data: PatientData):
-    # Convert input to DataFrame (names must match training columns)
+# Helper function to handle prediction logic
+def get_prediction(model, data: PatientData):
+    # Convert input data to a Pandas DataFrame
     features = pd.DataFrame([data.dict()])
     
-    # Predict
+    # Get the Class Prediction (0 or 1)
     prediction = model.predict(features)[0]
-    probability = model.predict_proba(features)[0][1] # Prob of class 1
     
-    result = "Positive (Heart Disease)" if prediction == 1 else "Negative (Healthy)"
-    return {"prediction": result, "probability": float(probability)}
+    # Get the Probability (Confidence)
+    probs = model.predict_proba(features)[0]
+    prob_sick = model.predict_proba(features)[0][1] # Probability of being class 1
+    
+    # Determine string result
+    if prediction == 1:
+        result = "Positive (Heart Disease)"
+    else:
+        result = "Negative (Healthy)"
+# Determine string result based on probability threshold to reflect confidence of prediction in heatmap because model may predict class 0 with low confidence and it is critical to inform user with high probability to be positive with negative
+    if prob_sick < 0.35:
+        result = "Positive (Heart Disease)"
+        final_prob = prob_sick
+    else:
+        result = "Negative (Healthy)"
+        final_prob = prob_sick
 
+    
+
+    return {
+        "prediction": result, 
+        "probability": float(prob_sick)
+    }
+
+# Endpoint 1: Logistic Regression
 @app.post("/predict/logistic")
 def predict_logistic(data: PatientData):
-    return predict_heart_disease(log_reg_model, data)
+    return get_prediction(log_reg_model, data)
 
+# Endpoint 2: Decision Tree
 @app.post("/predict/tree")
 def predict_tree(data: PatientData):
-    return predict_heart_disease(dt_model, data)
+    return get_prediction(dt_model, data)
